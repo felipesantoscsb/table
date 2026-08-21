@@ -1,6 +1,6 @@
 // src/disparos/handler.js
 
-import { normalizePhone } from '../conversation/store.js';
+import { normalizePhone, isBlocked } from '../conversation/store.js';
 import { safeSet, safeDel } from '../redis.js';
 import { sendOfficialTemplate } from '../whatsappOfficial/sender.js';
 import { registrarTemplateWhatsApp } from '../hub/client.js';
@@ -148,6 +148,12 @@ export async function fireDossie({ nome, phone, perfil, historico, respostas, so
     if (!DOSSIE_WHATSAPP_ENABLED) {
       await safeDel(`pending_dossie:${phone}`);
       console.log(`🛑 Disparo de dossiê pausado — pendência removida para ${nome} (${phone})`);
+      return;
+    }
+
+    if (await isBlocked(phone)) {
+      await safeDel(`pending_dossie:${phone}`);
+      console.log(`⛔ Disparo de dossiê cancelado para ${nome} (${phone}) — número bloqueado`);
       return;
     }
 

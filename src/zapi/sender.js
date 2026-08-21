@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { config } from '../../config/index.js';
-import { getLeadData } from '../conversation/store.js';
+import { getLeadData, isBlocked, normalizePhone } from '../conversation/store.js';
 
 // Anexa a join key (sck = lead_event_id do quiz) aos links da Cakto na mensagem,
 // para que a compra feita por esse link seja atribuível ao anúncio via CAPI
@@ -49,8 +49,24 @@ async function sendToAll(message, options = {}) {
   }
 }
 
+// A Karina e o número de backup nunca são silenciados pelo blocklist: são o
+// canal de notificação (handoff, red flag, erro). Bloqueá-los por engano
+// derrubaria a operação inteira em silêncio.
+function isProtectedPhone(phone) {
+  const alvo = normalizePhone(String(phone || ''));
+  return [config.sdr.phone, process.env.NUMERO_BACKUP]
+    .filter(Boolean)
+    .some(p => normalizePhone(String(p)) === alvo);
+}
+
 export async function sendMessage(phone, message, options = {}) {
   try {
+    // Último guard antes do envio: cobre qualquer caminho (agente, follow-up,
+    // disparo, recuperação de checkout) sem depender de cada chamador lembrar.
+    if (!isProtectedPhone(phone) && await isBlocked(phone)) {
+      console.log(`⛔ Envio cancelado para ${phone} (número bloqueado)`);
+      return null;
+    }
     const outgoing = await withCaktoSck(phone, message);
     if (!options.skipDelay) {
       const delay = typingDelay(outgoing);

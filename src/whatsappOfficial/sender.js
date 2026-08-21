@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isBlocked } from '../conversation/store.js';
 
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v25.0';
 const GRAPH_URL = `https://graph.facebook.com/${API_VERSION}`;
@@ -32,6 +33,12 @@ function buttonComponents(buttonParams = []) {
 }
 
 export async function sendOfficialTemplate({ to, templateName, languageCode, params = [], buttonParams = [] }) {
+  // Mesmo guard do canal Z-API: número bloqueado não recebe template oficial
+  // (cadência do quiz, disparos), independente do que já estiver agendado.
+  if (await isBlocked(to)) {
+    console.log(`⛔ Template ${templateName} cancelado para ${to} (número bloqueado)`);
+    return null;
+  }
   const phoneNumberId = requireEnv('WHATSAPP_PHONE_NUMBER_ID');
   const token = requireEnv('WHATSAPP_ACCESS_TOKEN');
   const language = languageCode || process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'pt_BR';

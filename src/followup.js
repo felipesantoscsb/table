@@ -6,7 +6,7 @@
 import { safeGet, safeSet, safeDel, safeKeys } from './redis.js';
 import { sendMessage } from './zapi/sender.js';
 import { generateFollowUpContact } from './ai/anthropic.js';
-import { activateLead, addMessage, enqueueMessage } from './conversation/store.js';
+import { activateLead, addMessage, enqueueMessage, isBlocked } from './conversation/store.js';
 
 const FOLLOWUP_DELAY_MS  = 6 * 60 * 60 * 1000; // 6 horas
 const TRACK_TTL_SEC      = 7  * 24 * 60 * 60;   // 7 dias
@@ -133,6 +133,11 @@ export async function fireFollowUp(lead, phone) {
 
 async function sendFollowUp(lead, phone) {
   // ── Guards rápidos ──────────────────────────────────────────────────────────
+  if (await isBlocked(phone)) {
+    console.log(`⛔ [quiz] ${phone} bloqueado — follow-up cancelado`);
+    await safeDel(`pending_followup:${phone}`);
+    return;
+  }
   if (await safeGet(`compra:${phone}`)) {
     console.log(`🛒 [quiz] ${phone} já comprou — follow-up cancelado`);
     return;

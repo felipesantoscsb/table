@@ -7,7 +7,7 @@
 
 import { generateRecoveryMessage } from '../ai/anthropic.js';
 import { sendMessage } from '../zapi/sender.js';
-import { addMessage, getLeadData, setRecoveryMode } from '../conversation/store.js';
+import { addMessage, getLeadData, setRecoveryMode, isBlocked } from '../conversation/store.js';
 
 export async function handleCheckoutRecovery(req, res) {
   const token = req.headers['x-recovery-token'];
@@ -20,6 +20,13 @@ export async function handleCheckoutRecovery(req, res) {
   res.json({ ok: true, queued: true }); // responde já; envia depois
 
   try {
+    // Opt-out permanente (/stop) antes de qualquer coisa: o aquisicao-table pode
+    // seguir disparando o gatilho, mas nada sai daqui — nem a chamada de LLM.
+    if (await isBlocked(p.phone)) {
+      console.log(`[Recovery-SDR] ignorado para ${p.phone} — número bloqueado`);
+      return;
+    }
+
     // Enriquece o perfil emocional pela conversa, se a lead já existir aqui.
     let perfil = p.perfil || null;
     try {

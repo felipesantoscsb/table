@@ -8,6 +8,7 @@ const PREFIX = {
   conv: 'conv:',
   queue: 'queue:',
   lastSeen: 'lastseen:',
+  blocked: 'blocked:',
 };
 
 // Normaliza número para formato consistente
@@ -20,6 +21,23 @@ export function normalizePhone(phone) {
     return digits.slice(0, 4) + '9' + digits.slice(4);
   }
   return digits;
+}
+
+// Bloqueio permanente por número (opt-out). Diferente de handedOff, que é por
+// conversa e volta a false em toda reativação (activateLead / setRecoveryMode):
+// o bloqueio sobrevive a novos gatilhos de quiz, formulário e recuperação de
+// checkout, e não expira. Só sai com /unstop.
+export async function blockPhone(phone) {
+  await safeSet(PREFIX.blocked + normalizePhone(phone), String(Date.now()));
+}
+
+export async function unblockPhone(phone) {
+  await safeDel(PREFIX.blocked + normalizePhone(phone));
+}
+
+export async function isBlocked(phone) {
+  if (!phone) return false;
+  return Boolean(await safeGet(PREFIX.blocked + normalizePhone(phone)));
 }
 
 async function getConv(phone) {
@@ -47,6 +65,10 @@ export async function addMessage(phone, role, content) {
 }
 
 export async function activateLead(phone, leadData) {
+  if (await isBlocked(phone)) {
+    console.log(`⛔ Ativação ignorada: ${normalizePhone(phone)} está bloqueado`);
+    return;
+  }
   const conv = await getConv(phone);
   conv.isActiveLead = true;
   conv.leadData = leadData;
@@ -90,6 +112,10 @@ export async function getConversationMode(phone) {
 // conduzidas pelo prompt de recuperação. Preserva leadData existente e mescla
 // os dados do checkout (pix/link) recebidos do aquisicao-table.
 export async function setRecoveryMode(phone, leadData) {
+  if (await isBlocked(phone)) {
+    console.log(`⛔ Recovery ignorado: ${normalizePhone(phone)} está bloqueado`);
+    return;
+  }
   const conv = await getConv(phone);
   conv.isActiveLead = true;
   conv.handedOff = false;

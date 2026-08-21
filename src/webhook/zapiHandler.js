@@ -1,6 +1,6 @@
 // src/webhook/zapiHandler.js
 
-import { isActiveLead, isHandedOff, setHandedOff, addMessage, getHistory, getLeadData, getSdrHistory, addSdrMessage, incrementTurn, getTurnCount, TURN_LIMIT, enqueueMessage, dequeueMessages, normalizePhone, deactivateLead, getConversationMode } from '../conversation/store.js';
+import { isActiveLead, isHandedOff, setHandedOff, blockPhone, unblockPhone, isBlocked, addMessage, getHistory, getLeadData, getSdrHistory, addSdrMessage, incrementTurn, getTurnCount, TURN_LIMIT, enqueueMessage, dequeueMessages, normalizePhone, deactivateLead, getConversationMode } from '../conversation/store.js';
 import { aggregate } from '../conversation/aggregator.js';
 import { generateReply, generateHandoffBriefing, generateConsultivo, generateFirstContact } from '../ai/anthropic.js';
 import { sendMessage, notifySDR, notifySDRHandoff, notifySDRRedflag, notifySDRTurnLimit, notifyError } from '../zapi/sender.js';
@@ -40,12 +40,33 @@ export async function handleZapiMessage(req, res) {
     // Mensagem da Karina
     if (phone === normalizePhone(config.sdr.phone)) {
       const trimmed = messageText.trim();
+      if (trimmed.toLowerCase().startsWith('/unstop')) {
+        const targetPhone = normalizePhone(trimmed.slice(7).trim());
+        if (!targetPhone) {
+          await avisaKarina('Uso: /unstop 5511999999999');
+          return;
+        }
+        await unblockPhone(targetPhone);
+        await avisaKarina(`🔓 Lead ${targetPhone} desbloqueada — a automação pode voltar a contatá-la.`);
+        return;
+      }
       if (trimmed.toLowerCase().startsWith('/stop')) {
         const targetPhone = normalizePhone(trimmed.slice(5).trim());
-        if (targetPhone) {
-          await setHandedOff(targetPhone);
-          await sendMessage(config.sdr.phone, `✅ Lead ${targetPhone} desativada.`, { skipDelay: true });
+        if (!targetPhone) {
+          await avisaKarina('Uso: /stop 5511999999999');
+          return;
         }
+        // Bloquear o próprio número da SDR silenciaria todas as notificações.
+        if (targetPhone === normalizePhone(config.sdr.phone)) {
+          await avisaKarina('⚠️ Não dá para bloquear o próprio número da SDR — isso silenciaria todas as notificações.');
+          return;
+        }
+        // handedOff silencia a conversa atual; blockPhone impede que qualquer
+        // novo gatilho (quiz, formulário, recuperação de checkout, disparo)
+        // reative o número mais tarde.
+        await setHandedOff(targetPhone);
+        await blockPhone(targetPhone);
+        await avisaKarina(`✅ Lead ${targetPhone} desativada e bloqueada. Use /unstop ${targetPhone} para reverter.`);
         return;
       }
       if (trimmed.toLowerCase().startsWith('/plano')) {
@@ -53,6 +74,13 @@ export async function handleZapiMessage(req, res) {
         return;
       }
       await handleSdrConsultivo(trimmed);
+      return;
+    }
+
+    // Bloqueio permanente tem prioridade sobre tudo: nem campanha, nem frase do
+    // quiz, nem lead ativa fazem o agente responder um número bloqueado.
+    if (await isBlocked(phone)) {
+      console.log(`⛔ Mensagem ignorada de ${phone} (número bloqueado)`);
       return;
     }
 
@@ -95,6 +123,10 @@ export async function handleZapiMessage(req, res) {
   } catch (err) {
     console.error('❌ Erro no handler da Zapi:', err.message);
   }
+}
+
+function avisaKarina(texto) {
+  return sendMessage(config.sdr.phone, texto, { skipDelay: true });
 }
 
 async function handleQuizActivation(phone) {

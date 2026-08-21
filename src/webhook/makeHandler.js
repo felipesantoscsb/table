@@ -1,7 +1,7 @@
 // src/webhook/makeHandler.js
 // Processa leads do formulário Make → ativa o agente SDR.
 
-import { activateLead, addMessage, enqueueMessage, normalizePhone, setHandedOff } from '../conversation/store.js';
+import { activateLead, addMessage, enqueueMessage, normalizePhone, setHandedOff, isBlocked } from '../conversation/store.js';
 import { generateFirstContact } from '../ai/anthropic.js';
 import { sendMessage, notifyManualHandoffBatch, notifySDR } from '../zapi/sender.js';
 import { garantirLeadCaptacaoNoHub, verificarElegibilidadeContatoSdr, bloqueioDefinitivoSdr } from '../hub/client.js';
@@ -50,6 +50,12 @@ function isNataliaSource(leadData = {}) {
 }
 
 async function validateAndActivateLead(leadData, phone) {
+  // Opt-out permanente (/stop) vem antes de qualquer check: nem chama o Hub.
+  if (await isBlocked(phone)) {
+    console.warn(`⛔ Lead ${leadData.nome} (${phone}) ignorado — número bloqueado`);
+    return { ok: false, blocked: true, reason: 'phone_blocked' };
+  }
+
   // Único veto que impede a ativação: o Hub confirmar que é paciente ou venda
   // concluída. Check indisponível/inconclusivo não bloqueia (fail-open).
   const eligibility = await verificarElegibilidadeContatoSdr({

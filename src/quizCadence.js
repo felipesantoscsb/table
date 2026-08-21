@@ -1,7 +1,7 @@
 import { safeGet, safeSet, safeDel, safeKeys } from './redis.js';
 import { sendOfficialTemplate } from './whatsappOfficial/sender.js';
 import { registrarTemplateWhatsApp } from './hub/client.js';
-import { normalizePhone } from './conversation/store.js';
+import { normalizePhone, isBlocked } from './conversation/store.js';
 
 const CHECK_INTERVAL_MS = 60 * 1000;
 const CADENCE_TTL_SEC = 7 * 24 * 60 * 60;
@@ -191,6 +191,13 @@ export async function fireQuizCadenceStep(phoneRaw, stepIndex) {
 
   if (await safeGet(`quiz_cadence_cancelled:${phone}`)) {
     await safeDel(pendingKey(phone, stepIndex));
+    return;
+  }
+
+  // Número bloqueado (/stop): encerra a cadência inteira, não só este step.
+  if (await isBlocked(phone)) {
+    await cancelQuizCadence(phone);
+    console.log(`⛔ [quiz-cadence] cadência cancelada para ${phone} (número bloqueado)`);
     return;
   }
 
