@@ -4,6 +4,7 @@ import { normalizePhone, isBlocked } from '../conversation/store.js';
 import { safeSet, safeDel } from '../redis.js';
 import { sendOfficialTemplate } from '../whatsappOfficial/sender.js';
 import { registrarTemplateWhatsApp } from '../hub/client.js';
+import { markOutboundSent } from '../outboundSuppression.js';
 
 const PENDING_DOSSIE_TTL = 24 * 60 * 60; // 24h — cobre fora-de-horário
 
@@ -176,6 +177,7 @@ export async function fireDossie({ nome, phone, perfil, historico, respostas, so
       params: [...params, ...buttonParams],
       provider,
     });
+    await markOutboundSent(phone);
     await safeDel(`pending_dossie:${phone}`);
     console.log(`✅ Dossiê oficial enviado para ${nome} (${phone})`);
   } catch (err) {

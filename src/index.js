@@ -10,6 +10,13 @@ import { handleQuizLead } from './webhook/quizHandler.js';
 import { handleZapiMessage, processQueue } from './webhook/zapiHandler.js';
 import { handleQuizPre } from './webhook/quizPreHandler.js';
 import { handleDisparo, fireDossie, DOSSIE_WHATSAPP_ENABLED } from './disparos/handler.js';
+import {
+  handleMapaLiaLead,
+  fireLiaRec,
+  fireLiaEntende,
+  LIA_REC_ENABLED,
+  LIA_ENTENDE_ENABLED,
+} from './webhook/mapaLiaHandler.js';
 import { gerarDossie } from './disparos/gerador.js';
 import { handleTrack } from './webhook/trackHandler.js';
 import { handleTicto } from './webhook/tictoHandler.js';
@@ -47,6 +54,9 @@ app.use('/', express.static(join(__dirname, '../public/planos')));
 // Webhooks
 app.post('/webhook/lead', handleMakeLead);
 app.post('/webhook/quiz', handleQuizLead);
+// Mapa LIA — namespace/templates/flags próprios (LIA_REC_ENABLED/LIA_ENTENDE_ENABLED),
+// nunca reaproveita pending_dossie:/quiz: do Raiz.
+app.post('/webhook/mapa-lia', handleMapaLiaLead);
 app.post('/webhook/zapi', handleZapiMessage);
 app.post('/webhook/quiz-pre', handleQuizPre);
 app.post('/webhook/disparo', handleDisparo);
@@ -158,6 +168,46 @@ async function recoverPendingTimers() {
     dossiesRecovered++;
   }
 
+  // ── Mapa LIA pendentes (lia_rec + lia_entende) ─────────────────────────────
+  let liaRecRecovered = 0;
+  let liaEntendeRecovered = 0;
+  if (LIA_REC_ENABLED) {
+    const keys = await safeKeys('pending_lia_rec:*');
+    for (const key of keys) {
+      const raw = await safeGet(key);
+      if (!raw) continue;
+      let pending;
+      try { pending = JSON.parse(raw); } catch { continue; }
+      const { leadData, fire_at } = pending;
+      if (!leadData?.phone) continue;
+      const remaining = fire_at - now;
+      const delay = remaining > 0 ? remaining : 0;
+      console.log(`⏳ [recovery] lia_rec para ${leadData.nome} (${leadData.phone}) — em ${Math.round(delay / 60000)}min`);
+      setTimeout(() => fireLiaRec(leadData), delay);
+      liaRecRecovered++;
+    }
+  } else {
+    for (const key of await safeKeys('pending_lia_rec:*')) await safeDel(key);
+  }
+  if (LIA_ENTENDE_ENABLED) {
+    const keys = await safeKeys('pending_lia_entende:*');
+    for (const key of keys) {
+      const raw = await safeGet(key);
+      if (!raw) continue;
+      let pending;
+      try { pending = JSON.parse(raw); } catch { continue; }
+      const { leadData, fire_at } = pending;
+      if (!leadData?.phone) continue;
+      const remaining = fire_at - now;
+      const delay = remaining > 0 ? remaining : 0;
+      console.log(`⏳ [recovery] lia_entende para ${leadData.nome} (${leadData.phone}) — em ${Math.round(delay / 60000)}min`);
+      setTimeout(() => fireLiaEntende(leadData), delay);
+      liaEntendeRecovered++;
+    }
+  } else {
+    for (const key of await safeKeys('pending_lia_entende:*')) await safeDel(key);
+  }
+
   // ── Follow-ups pendentes ───────────────────────────────────────────────────
   if (FOLLOWUP_6H_ENABLED) {
     const followupKeys = await safeKeys('pending_followup:*');
@@ -203,8 +253,8 @@ async function recoverPendingTimers() {
     await clearPendingQuizCadence();
   }
 
-  if (dossiesRecovered + followupsRecovered > 0) {
-    console.log(`✅ [recovery] ${dossiesRecovered} dossiê(s) e ${followupsRecovered} follow-up(s) recuperados`);
+  if (dossiesRecovered + followupsRecovered + liaRecRecovered + liaEntendeRecovered > 0) {
+    console.log(`✅ [recovery] ${dossiesRecovered} dossiê(s), ${followupsRecovered} follow-up(s), ${liaRecRecovered} lia_rec e ${liaEntendeRecovered} lia_entende recuperados`);
   } else {
     console.log('✅ [recovery] Nenhum timer pendente encontrado');
   }
@@ -220,6 +270,7 @@ Endpoints:
   POST /webhook/zapi     → Recebe mensagens da Zapi
   POST /webhook/quiz-pre → Armazena dados do quiz
   POST /webhook/disparo  → Dispara dossiê personalizado
+  POST /webhook/mapa-lia → Recebe leads do Mapa LIA (aquisicao-table)
   POST /webhook/ticto    → Webhook de compras da Ticto
   POST /webhook/campanha-registro → Registra participante de campanha sazonal (Hub)
   POST /webhook/quiz-cadence/cancel → Cancela cadência pós-quiz
