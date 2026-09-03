@@ -274,7 +274,7 @@ async function processAggregatedMessages(phone, combinedMessage) {
 
     const mode = await getConversationMode(phone);
     const commercial=await getCommercialState(phone);
-    const evelyn={...evelynEligibility({phone,source:leadData.source,message:combinedMessage,history}),stage:commercial.stage||'candidate'};
+    const evelyn={...evelynEligibility({phone,source:leadData.source,message:combinedMessage,history,leadData}),stage:commercial.stage||'candidate'};
     if(evelyn.considered&&!commercial.consideredAt){await setCommercialState(phone,{consideredAt:new Date().toISOString(),signals:evelyn.signals,stage:evelyn.eligible?'candidate':'not_offered'});await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:evelyn.eligible?'evelyn_candidate':'evelyn_not_offered',phone,leadData,payload:{reason:evelyn.reason,signals:evelyn.signals,explicit_intent:true,decision:evelyn.eligible?'considering':'not_offered'}});}
     const result = await generateReply(phone, combinedMessage, history, leadData, mode, evelyn);
 

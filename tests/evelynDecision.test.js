@@ -8,13 +8,22 @@ process.env.ZAPI_TOKEN='test';
 process.env.ZAPI_CLIENT_TOKEN='test';
 process.env.SDR_PHONE='5511000000000';
 process.env.WEBHOOK_SECRET='test';
-const { explicitEvelynSignals,validEvelynTransition } = await import('../src/evelyn/decision.js');
+const { explicitEvelynSignals,validEvelynTransition,evelynEligibility,hasExplicitMalePatientEvidence } = await import('../src/evelyn/decision.js');
 const { buildRadarBaseline,radarCanRender } = await import('../src/evelyn/radar.js');
 
 test('detecta somente intenção explícita de acompanhamento com Evelyn',()=>{
   assert.ok(explicitEvelynSignals('Quero acompanhamento direto com a Evelyn').length>0);
   assert.equal(explicitEvelynSignals('Quero uma nutricionista que me acolha').length,0);
   assert.equal(explicitEvelynSignals('Vi um vídeo da Evelyn').length,0);
+});
+
+test('jamais torna paciente masculino elegível para Evelyn',()=>{
+  assert.equal(hasExplicitMalePatientEvidence({genero:'Masculino'}),true);
+  assert.equal(hasExplicitMalePatientEvidence({},'Sou homem e quero passar com a Evelyn'),true);
+  assert.equal(hasExplicitMalePatientEvidence({},'Meu marido é homem e quero passar com a Evelyn'),false);
+  const result=evelynEligibility({phone:'5511999999999',source:'formulario',message:'Quero acompanhamento direto com a Evelyn',leadData:{sexo:'masculino'}});
+  assert.equal(result.eligible,false);
+  assert.equal(result.reason,'male_patient_not_eligible');
 });
 
 test('máquina de estados não deixa o modelo pular preço nem regredir',()=>{
@@ -33,6 +42,8 @@ test('checkout InfinitePay está no exemplo público',async()=>{
   const html=await readFile(new URL('../public/evelyn-exemplos/emocional.html',import.meta.url),'utf8');
   assert.match(html,/checkout\.infinitepay\.io\/tableclinic\/Fllvy2wB2O/);
   assert.match(html,/Exemplo fictício/);
+  assert.match(html,/\/fotos\/evelyn-liu\.png/);
+  assert.match(html,/LIA: registros, reflexões e intervenções/);
 });
 
 test('radar usa régua fixa, evidência e assume dados insuficientes',()=>{
@@ -43,4 +54,5 @@ test('radar usa régua fixa, evidência e assume dados insuficientes',()=>{
   assert.equal(radarCanRender(rich),true);
   assert.ok(rich.dimensions.some(d=>d.evidence.length>0));
   assert.ok(rich.dimensions.every(d=>d.score===null||(d.score>=1&&d.score<=5)));
+  assert.ok(rich.dimensions.every(d=>d.score===null||d.objective===Math.min(5,d.score+2)));
 });

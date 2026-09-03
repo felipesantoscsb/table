@@ -41,7 +41,7 @@ export function buildRadarBaseline(input,source='sdr_history'){
     }
     const confidence=evidence.length>=3?'high':evidence.length===2?'medium':evidence.length===1?'low':'insufficient';
     const score=!evidence.length?null:Math.max(1,Math.min(5,3+Math.sign(balance)));
-    return {...d,key:d.key,label:d.label,score,objective:score===null?null:Math.min(5,score+1),confidence,evidence};
+    return {...d,key:d.key,label:d.label,score,objective:score===null?null:Math.min(5,score+2),confidence,evidence};
   }).map(({negative,positive,...d})=>d);
   return {version:RADAR_VERSION,scale:{min:1,max:5,direction:'higher_means_more_available_resource'},source,generated_at:new Date().toISOString(),dimensions,scored_dimensions:dimensions.filter(d=>d.score!==null).length};
 }
