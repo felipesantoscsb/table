@@ -10,6 +10,7 @@ import { activateLead } from '../conversation/store.js';
 import { garantirLeadCaptacaoNoHub, migrarParaPreConsulta, verificarElegibilidadeContatoSdr, bloqueioDefinitivoSdr, registrarEventoEvelyn } from '../hub/client.js';
 import { evelynEligibility, validEvelynTransition } from '../evelyn/decision.js';
 import { createEvelynJourney } from '../evelyn/journey.js';
+import { scheduleEvelynJourney } from '../evelyn/delivery.js';
 import crypto from 'crypto';
 import { getParticipant, handleCampanhaReply } from '../campanha/handler.js';
 import { config } from '../../config/index.js';
@@ -286,7 +287,7 @@ async function processAggregatedMessages(phone, combinedMessage) {
       await setCommercialState(phone,{branch:result.evelynEvent==='evelyn_routed_to_table'?'table':'evelyn',stage,signals:evelyn.signals});
       await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:result.evelynEvent,phone,leadData,payload:{reason:evelyn.reason,signals:evelyn.signals,explicit_intent:true,price_response:stage.includes('accepted')?'accepted':stage.includes('declined')?'declined':null}});
       if(result.evelynEvent==='evelyn_price_accepted'&&!commercial.journeyUrl){
-        try{const journey=await createEvelynJourney({phone,leadData,history:[...history,{role:'user',content:combinedMessage}]});result.leadMessage=`${result.leadMessage}\n\nPreparei sua Jornada com a Evelyn: ${journey.url}`;await setCommercialState(phone,{stage:'journey_sent',journeyUrl:journey.url});await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:'evelyn_journey_generated',phone,leadData,payload:{journey_url:journey.url,signals:evelyn.signals,baseline:journey.baseline,objective_90_days:journey.objective90Days}});await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:'evelyn_journey_sent',phone,leadData,payload:{journey_url:journey.url}});}catch(err){console.error('[evelyn] jornada falhou, fluxo segue:',err.message);}
+        try{const journey=await createEvelynJourney({phone,leadData,history:[...history,{role:'user',content:combinedMessage}]});await scheduleEvelynJourney({phone,leadData,journey});result.leadMessage=`Perfeito${leadData.nome?`, ${String(leadData.nome).split(' ')[0]}`:''}. A partir do que você compartilhou, vou preparar junto com a equipe uma apresentação personalizada da sua Jornada com a Evelyn. Em até 30 minutos eu te envio por aqui.`;await setCommercialState(phone,{stage:'journey_prepared',journeyUrl:journey.url});await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:'evelyn_journey_generated',phone,leadData,payload:{journey_url:journey.url,signals:evelyn.signals,baseline:journey.baseline,objective_90_days:journey.objective90Days}});}catch(err){console.error('[evelyn] jornada falhou, fluxo segue:',err.message);}
       }
       if(result.evelynEvent==='evelyn_routed_to_table')migrarParaPreConsulta({leadData,phone,turno:null,briefing:'Lead retornou naturalmente do branch Evelyn para avaliação pela pré-consulta Table.'}).catch(()=>{});
     }

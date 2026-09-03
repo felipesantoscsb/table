@@ -44,6 +44,19 @@ test('checkout InfinitePay está no exemplo público',async()=>{
   assert.match(html,/Exemplo fictício/);
   assert.match(html,/\/fotos\/evelyn-liu\.png/);
   assert.match(html,/LIA: registros, reflexões e intervenções/);
+  assert.match(html,/PIX · Cartão de crédito · Apple Pay/);
+  assert.doesNotMatch(html,/wa\.me|Voltar.*WhatsApp/i);
+});
+
+test('Jornada é enviada por fila persistente em até 30 minutos',async()=>{
+  const handler=await readFile(new URL('../src/webhook/zapiHandler.js',import.meta.url),'utf8');
+  const delivery=await readFile(new URL('../src/evelyn/delivery.js',import.meta.url),'utf8');
+  assert.match(handler,/Em até 30 minutos eu te envio por aqui/);
+  assert.match(handler,/scheduleEvelynJourney/);
+  assert.match(delivery,/pending_evelyn_journey:/);
+  assert.match(delivery,/20\*60\*1000/);
+  assert.match(delivery,/30\*60\*1000/);
+  assert.match(delivery,/recoverPendingEvelynJourneys/);
 });
 
 test('radar usa régua fixa, evidência e assume dados insuficientes',()=>{

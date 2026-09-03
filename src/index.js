@@ -32,6 +32,7 @@ import {
 } from './quizCadence.js';
 import { safeKeys, safeGet, safeSet, safeDel } from './redis.js';
 import { getEvelynJourney,getEvelynJourneyMeta } from './evelyn/journey.js';
+import { recoverPendingEvelynJourneys } from './evelyn/delivery.js';
 import { registrarEventoEvelyn } from './hub/client.js';
 const redisGet = safeGet; // alias para clareza no recovery
 
@@ -242,6 +243,7 @@ Endpoints:
   }
   startQuizCadenceJob();
   recoverPendingTimers().catch(err => console.error('❌ Erro na recovery de timers:', err.message));
+  recoverPendingEvelynJourneys().then(total=>console.log(`✅ [recovery] ${total} Jornada(s) Evelyn pendente(s)`)).catch(err=>console.error('❌ Erro na recovery Evelyn:',err.message));
 
   setInterval(async () => {
     const brasilia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
