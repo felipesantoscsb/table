@@ -100,6 +100,18 @@ export async function getLeadData(phone) {
   return conv.leadData;
 }
 
+export async function getCommercialState(phone) {
+  const conv = await getConv(phone);
+  return conv.commercial || { branch: 'table', stage: 'default', signals: [] };
+}
+
+export async function setCommercialState(phone, patch) {
+  const conv = await getConv(phone);
+  conv.commercial = { ...(conv.commercial || { branch:'table',stage:'default',signals:[] }), ...(patch || {}), updatedAt:new Date().toISOString() };
+  await saveConv(phone, conv);
+  return conv.commercial;
+}
+
 // Modo da conversa: 'sdr' (padrão) ou 'recovery' (recuperação de checkout).
 // No modo recovery o agente usa o prompt de recuperação e NUNCA agenda
 // pré-consulta — foco é fechar a venda do Protocolo Raiz.

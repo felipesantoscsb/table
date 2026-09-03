@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "test": "node --test tests/*.test.js",
     "audit:active": "node scripts/audit-active-conversations.js",
+    "generate:evelyn-examples": "node scripts/generate-evelyn-examples.js",
     "reemit:manual-handoffs": "node scripts/reemit-manual-handoffs.js"
   },
   "dependencies": {

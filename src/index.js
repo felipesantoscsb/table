@@ -31,6 +31,8 @@ import {
   QUIZ_CADENCE_ENABLED,
 } from './quizCadence.js';
 import { safeKeys, safeGet, safeSet, safeDel } from './redis.js';
+import { getEvelynJourney,getEvelynJourneyMeta } from './evelyn/journey.js';
+import { registrarEventoEvelyn } from './hub/client.js';
 const redisGet = safeGet; // alias para clareza no recovery
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +56,10 @@ app.post('/webhook/ticto', handleTicto);
 app.post('/webhook/checkout-recovery', handleCheckoutRecovery);
 app.post('/webhook/campanha-registro', handleCampanhaRegistro);
 app.post('/webhook/quiz-cadence/cancel', handleQuizCadenceCancel);
+app.post('/webhook/evelyn-page-event',async(req,res)=>{const {slug,event_type}=req.body||{};const allowed=['evelyn_journey_opened','evelyn_journey_radar_viewed','evelyn_journey_90days_viewed','evelyn_journey_evelyn_viewed','evelyn_journey_investment_viewed','evelyn_journey_checkout_clicked'];if(!/^evelyn-[0-9a-f-]{36}$/.test(String(slug))||!allowed.includes(event_type))return res.status(400).json({ok:false});const meta=await getEvelynJourneyMeta(slug);if(!meta)return res.status(404).json({ok:false});res.json({ok:true});registrarEventoEvelyn({eventId:`${slug}:${event_type}`,eventType:event_type,phone:meta.phone,leadData:meta.leadData,payload:{journey_url:`${config.evelyn.journeyBaseUrl.replace(/\/$/,'')}/evelyn/${slug}`}}).catch(()=>{});});
+app.get('/evelyn/exemplo',(req,res)=>res.redirect('/evelyn/exemplo/emocional'));
+app.get('/evelyn/exemplo/:perfil',(req,res)=>{const allowed=new Set(['emocional','restricao','rotina']);if(!allowed.has(req.params.perfil))return res.status(404).send('Exemplo não encontrado');res.sendFile(join(__dirname,`../public/evelyn-exemplos/${req.params.perfil}.html`));});
+app.get('/evelyn/:slug',async(req,res)=>{const html=await getEvelynJourney(req.params.slug);if(!html)return res.status(404).send('Jornada não encontrada ou expirada');res.type('html').send(html);});
 
 // Track link (follow-up)
 app.get('/track/:uuid', handleTrack);

@@ -14,6 +14,8 @@ const HUB_CONTACT_CHECK_URL = process.env.HUB_CONTACT_CHECK_URL
 const HUB_CAPTACAO_LEAD_URL = process.env.HUB_CAPTACAO_LEAD_URL
   || 'https://crm.tableclinic.com.br/webhook/quiz';
 const HUB_SECRET = process.env.HUB_WEBHOOK_SECRET || process.env.INTERNAL_WEBHOOK_SECRET;
+const HUB_EVELYN_EVENT_URL = process.env.HUB_EVELYN_EVENT_URL
+  || 'https://crm.tableclinic.com.br/webhook/evelyn-branch/event';
 
 const retryDelays = [0, 1500, 4000];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -62,6 +64,14 @@ export async function migrarParaPreConsulta({ leadData = {}, phone, turno, brief
     }
   }
   throw lastError;
+}
+
+export async function registrarEventoEvelyn({eventId,eventType,phone,leadData={},payload={}}){
+  if(!HUB_SECRET)return null;
+  try{
+    const res=await axios.post(HUB_EVELYN_EVENT_URL,{event_id:eventId,event_type:eventType,phone,lead_name:leadData.nome||leadData.name||null,source:leadData.source||null,occurred_at:new Date().toISOString(),payload},{headers:{'Content-Type':'application/json','x-webhook-secret':HUB_SECRET},timeout:8000});
+    return res.data;
+  }catch(err){console.warn(`[evelyn] analytics não bloqueante: ${err.message}`);return null;}
 }
 
 export async function registrarTemplateWhatsApp({ leadData = {}, phone, templateName, params = [], provider = null }) {

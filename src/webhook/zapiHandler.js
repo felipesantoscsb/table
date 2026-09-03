@@ -1,13 +1,16 @@
 // src/webhook/zapiHandler.js
 
-import { isActiveLead, isHandedOff, setHandedOff, blockPhone, unblockPhone, isBlocked, addMessage, getHistory, getLeadData, getSdrHistory, addSdrMessage, incrementTurn, getTurnCount, TURN_LIMIT, enqueueMessage, dequeueMessages, normalizePhone, deactivateLead, getConversationMode } from '../conversation/store.js';
+import { isActiveLead, isHandedOff, setHandedOff, blockPhone, unblockPhone, isBlocked, addMessage, getHistory, getLeadData, getSdrHistory, addSdrMessage, incrementTurn, getTurnCount, TURN_LIMIT, enqueueMessage, dequeueMessages, normalizePhone, deactivateLead, getConversationMode, getCommercialState, setCommercialState } from '../conversation/store.js';
 import { aggregate } from '../conversation/aggregator.js';
 import { generateReply, generateHandoffBriefing, generateConsultivo, generateFirstContact } from '../ai/anthropic.js';
 import { sendMessage, notifySDR, notifySDRHandoff, notifySDRRedflag, notifySDRTurnLimit, notifyError } from '../zapi/sender.js';
 import { handlePlanoCommand } from '../planos/handler.js';
 import { getQuizPreData } from './quizPreHandler.js';
 import { activateLead } from '../conversation/store.js';
-import { garantirLeadCaptacaoNoHub, migrarParaPreConsulta, verificarElegibilidadeContatoSdr, bloqueioDefinitivoSdr } from '../hub/client.js';
+import { garantirLeadCaptacaoNoHub, migrarParaPreConsulta, verificarElegibilidadeContatoSdr, bloqueioDefinitivoSdr, registrarEventoEvelyn } from '../hub/client.js';
+import { evelynEligibility, validEvelynTransition } from '../evelyn/decision.js';
+import { createEvelynJourney } from '../evelyn/journey.js';
+import crypto from 'crypto';
 import { getParticipant, handleCampanhaReply } from '../campanha/handler.js';
 import { config } from '../../config/index.js';
 
@@ -270,7 +273,23 @@ async function processAggregatedMessages(phone, combinedMessage) {
     }
 
     const mode = await getConversationMode(phone);
-    const result = await generateReply(phone, combinedMessage, history, leadData, mode);
+    const commercial=await getCommercialState(phone);
+    const evelyn={...evelynEligibility({phone,source:leadData.source,message:combinedMessage,history}),stage:commercial.stage||'candidate'};
+    if(evelyn.considered&&!commercial.consideredAt){await setCommercialState(phone,{consideredAt:new Date().toISOString(),signals:evelyn.signals,stage:evelyn.eligible?'candidate':'not_offered'});await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:evelyn.eligible?'evelyn_candidate':'evelyn_not_offered',phone,leadData,payload:{reason:evelyn.reason,signals:evelyn.signals,explicit_intent:true,decision:evelyn.eligible?'considering':'not_offered'}});}
+    const result = await generateReply(phone, combinedMessage, history, leadData, mode, evelyn);
+
+    if(!evelyn.eligible)result.evelynEvent='';
+    // O acompanhamento direto não é um handoff de pré-consulta Table.
+    if(evelyn.eligible&&result.evelynEvent!=='evelyn_routed_to_table')result.handoff=false;
+    if(result.evelynEvent&&validEvelynTransition(evelyn.stage,result.evelynEvent)){
+      const stage=result.evelynEvent.replace(/^evelyn_/,'');
+      await setCommercialState(phone,{branch:result.evelynEvent==='evelyn_routed_to_table'?'table':'evelyn',stage,signals:evelyn.signals});
+      await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:result.evelynEvent,phone,leadData,payload:{reason:evelyn.reason,signals:evelyn.signals,explicit_intent:true,price_response:stage.includes('accepted')?'accepted':stage.includes('declined')?'declined':null}});
+      if(result.evelynEvent==='evelyn_price_accepted'&&!commercial.journeyUrl){
+        try{const journey=await createEvelynJourney({phone,leadData,history:[...history,{role:'user',content:combinedMessage}]});result.leadMessage=`${result.leadMessage}\n\nPreparei sua Jornada com a Evelyn: ${journey.url}`;await setCommercialState(phone,{stage:'journey_sent',journeyUrl:journey.url});await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:'evelyn_journey_generated',phone,leadData,payload:{journey_url:journey.url,signals:evelyn.signals,baseline:journey.baseline,objective_90_days:journey.objective90Days}});await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:'evelyn_journey_sent',phone,leadData,payload:{journey_url:journey.url}});}catch(err){console.error('[evelyn] jornada falhou, fluxo segue:',err.message);}
+      }
+      if(result.evelynEvent==='evelyn_routed_to_table')migrarParaPreConsulta({leadData,phone,turno:null,briefing:'Lead retornou naturalmente do branch Evelyn para avaliação pela pré-consulta Table.'}).catch(()=>{});
+    }
 
     if (result.redflag) {
       console.log(`🚨 Red flag detectado para ${phone}`);

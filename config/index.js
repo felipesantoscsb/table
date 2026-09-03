@@ -31,6 +31,15 @@ export const config = {
     secret: required('WEBHOOK_SECRET'),
   },
 
+  evelyn: {
+    enabled: process.env.EVELYN_BRANCH_ENABLED === 'true',
+    pilotPercent: Math.min(100, Math.max(0, Number(process.env.EVELYN_BRANCH_PILOT_PERCENT || 100))),
+    allowedSources: String(process.env.EVELYN_BRANCH_ALLOWED_SOURCES || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+    checkoutUrl: process.env.EVELYN_CHECKOUT_URL || 'https://checkout.infinitepay.io/tableclinic/Fllvy2wB2O',
+    price: Number(process.env.EVELYN_PRICE_BRL || 4800),
+    journeyBaseUrl: process.env.EVELYN_JOURNEY_BASE_URL || 'https://jornada.tableclinic.com.br',
+  },
+
   // 90s — aguarda mais mensagens antes de processar
   aggregationDelay: 90_000,
 };

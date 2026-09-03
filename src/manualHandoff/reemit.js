@@ -19,20 +19,8 @@ function isNataliaSource(leadData = {}) {
   return fields.some(v => v.includes('natalia') || v.includes('natália') || v.includes('kelm'));
 }
 
-function isEvelynDirectSource(leadData = {}) {
-  const fields = [
-    leadData.source,
-    leadData.origin,
-    leadData.event_source_url,
-    leadData.url,
-    leadData.slug,
-  ].filter(Boolean).map(v => String(v).toLowerCase());
-
-  return fields.some(v => v.includes('formulario_consulta_evelyn'));
-}
-
-function manualSourceMatches(leadData, { includeEvelynDirect = false } = {}) {
-  return isNataliaSource(leadData) || (includeEvelynDirect && isEvelynDirectSource(leadData));
+function manualSourceMatches(leadData) {
+  return isNataliaSource(leadData);
 }
 
 function leadStatus(conv) {
@@ -83,7 +71,6 @@ async function scanConversationKeys() {
 
 export async function collectManualHandoffLeads(options = {}) {
   const {
-    includeEvelynDirect = false,
     onlyPending = true,
     skipAlreadyReemitted = true,
     limit = 50,
@@ -102,7 +89,7 @@ export async function collectManualHandoffLeads(options = {}) {
     try { conv = JSON.parse(raw); } catch { continue; }
 
     const leadData = conv.leadData || {};
-    if (!manualSourceMatches(leadData, { includeEvelynDirect })) continue;
+    if (!manualSourceMatches(leadData)) continue;
     if (onlyPending && conv.handedOff === true) continue;
 
     const phone = key.replace(/^conv:/, '');
@@ -130,13 +117,11 @@ export async function collectManualHandoffLeads(options = {}) {
 
 export async function reemitManualHandoffs(options = {}) {
   const {
-    includeEvelynDirect = false,
     dryRun = false,
     limit = 50,
   } = options;
 
   const leads = await collectManualHandoffLeads({
-    includeEvelynDirect,
     onlyPending: true,
     skipAlreadyReemitted: true,
     limit,
@@ -146,9 +131,7 @@ export async function reemitManualHandoffs(options = {}) {
 
   if (!dryRun) {
     await notifyManualHandoffBatch({
-      title: includeEvelynDirect
-        ? '⚠️ *Leads Natália/Evelyn para ativação manual*'
-        : '⚠️ *Leads Natália para ativação manual*',
+      title: '⚠️ *Leads Natália para ativação manual*',
       leads,
     });
 

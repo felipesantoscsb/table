@@ -191,7 +191,7 @@ Responda APENAS em JSON válido. Sem texto antes ou depois. Sem blocos de códig
   }
 }
 
-export async function generateReply(phone, newMessage, history, leadData, mode = 'sdr') {
+export async function generateReply(phone, newMessage, history, leadData, mode = 'sdr', evelyn = null) {
   const scoreVal = leadData.qualificacao?.score ?? leadData.score ?? '?';
   const tierVal = leadData.qualificacao?.tier || leadData.temperatura || '?';
 
@@ -236,6 +236,11 @@ Maior dificuldade: ${leadData.maiorDificuldade || leadData.dificuldade || 'não 
 O que mais pesa: ${leadData.oqueMaisPesa || leadData.dores || 'não informado'}
 Source: ${leadData.source || 'não informado'}
 
+CONTEXTO TÉCNICO EVELYN: ${evelyn?.eligible ? 'ELEGÍVEL' : 'NÃO ELEGÍVEL'}.
+Motivo técnico: ${evelyn?.reason || 'não avaliado'}.
+Sinais permitidos: ${(evelyn?.signals || []).join(', ') || 'nenhum'}.
+Estado atual do branch: ${evelyn?.stage || 'default'}.
+
 A lead acabou de responder. Gere a próxima mensagem.
 
 Responda APENAS em JSON válido. Sem texto antes ou depois. Sem blocos de código:
@@ -245,7 +250,8 @@ Responda APENAS em JSON válido. Sem texto antes ou depois. Sem blocos de códig
   "handoff": false,
   "handoffTurno": "",
   "redflag": false,
-  "redflagMotivo": ""
+  "redflagMotivo": "",
+  "evelynEvent": ""
 }
 
 Se a lead sinalizou interesse em agendar e você já perguntou o turno e ela respondeu, defina handoff: true e handoffTurno com o turno informado.
