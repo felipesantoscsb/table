@@ -35,7 +35,7 @@ export async function deliverEvelynJourney(phone){
   if(!lock)return false;
   try{
     const message=`Sua Jornada personalizada com a Evelyn ficou pronta. Preparei essa apresentação a partir do que você compartilhou:\n\n${pending.journey.url}`;
-    await sendMessage(phone,message);
+    await sendMessage(phone,message,{skipDelay:true});
     await addMessage(phone,'assistant',message);
     await setCommercialState(phone,{stage:'journey_sent',journeyUrl:pending.journey.url,journeySentAt:new Date().toISOString()});
     await registrarEventoEvelyn({eventId:crypto.randomUUID(),eventType:'evelyn_journey_sent',phone,leadData:pending.leadData,payload:{journey_url:pending.journey.url}});
